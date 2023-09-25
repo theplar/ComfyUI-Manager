@@ -1,9 +1,10 @@
 import configparser
 import shutil
 import folder_paths
-import os, sys
-import subprocess
+import os
+import sys
 import threading
+import subprocess
 
 
 def handle_stream(stream, prefix):
@@ -55,7 +56,7 @@ sys.path.append('../..')
 from torchvision.datasets.utils import download_url
 
 # ensure .js
-print("### Loading: ComfyUI-Manager (V0.23.3)")
+print("### Loading: ComfyUI-Manager (V0.30.4)")
 
 comfy_ui_required_revision = 1240
 comfy_ui_revision = "Unknown"
@@ -76,6 +77,12 @@ config_path = os.path.join(os.path.dirname(__file__), "config.ini")
 cached_config = None
 
 
+default_channels = 'default::https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main,recent::https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/node_db/new,'
+with open(os.path.join(comfyui_manager_path, 'channels.list'), 'r') as file:
+    channels = file.read()
+    default_channels = channels.replace('\n', ',')
+
+
 from comfy.cli_args import args
 import latent_preview
 
@@ -84,7 +91,10 @@ def write_config():
     config = configparser.ConfigParser()
     config['default'] = {
         'preview_method': get_current_preview_method(),
-        'badge_mode': get_config()['badge_mode']
+        'badge_mode': get_config()['badge_mode'],
+        'git_exe':  get_config()['git_exe'],
+        'channel_url': get_config()['channel_url'],
+        'channel_url_list': get_config()['channel_url_list']
     }
     with open(config_path, 'w') as configfile:
         config.write(configfile)
@@ -96,13 +106,35 @@ def read_config():
         config.read(config_path)
         default_conf = config['default']
 
+        channel_url_list_is_valid = True
+        if 'channel_url_list' in default_conf and default_conf['channel_url_list'] != '':
+            for item in default_conf['channel_url_list'].split(","):
+                if len(item.split("::")) != 2:
+                    channel_url_list_is_valid = False
+                    break
+
+        if channel_url_list_is_valid:
+            ch_url_list = default_conf['channel_url_list']
+        else:
+            print(f"[WARN] ComfyUI-Manager: channel_url_list is invalid format")
+            ch_url_list = ''
+
         return {
                     'preview_method': default_conf['preview_method'] if 'preview_method' in default_conf else get_current_preview_method(),
-                    'badge_mode': default_conf['badge_mode'] if 'badge_mode' in default_conf else 'none'
+                    'badge_mode': default_conf['badge_mode'] if 'badge_mode' in default_conf else 'none',
+                    'git_exe': default_conf['git_exe'] if 'git_exe' in default_conf else '',
+                    'channel_url': default_conf['channel_url'] if 'channel_url' in default_conf else 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main',
+                    'channel_url_list': ch_url_list
                }
 
     except Exception:
-        return {'preview_method': get_current_preview_method(), 'badge_mode': 'none'}
+        return {
+            'preview_method': get_current_preview_method(),
+            'badge_mode': 'none',
+            'git_exe': '',
+            'channel_url': 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main',
+            'channel_url_list': ''
+        }
 
 
 def get_config():
@@ -208,9 +240,11 @@ print_comfyui_version()
 
 
 # use subprocess to avoid file system lock by git (Windows)
-def __win_check_git_update(path, do_fetch=False):
+def __win_check_git_update(path, do_fetch=False, do_update=False):
     if do_fetch:
         command = [sys.executable, git_script_path, "--fetch", path]
+    elif do_update:
+        command = [sys.executable, git_script_path, "--pull", path]
     else:
         command = [sys.executable, git_script_path, "--check", path]
 
@@ -218,12 +252,29 @@ def __win_check_git_update(path, do_fetch=False):
     output, _ = process.communicate()
     output = output.decode('utf-8').strip()
 
-    if "CUSTOM NODE CHECK: True" in output:
-        process.wait()
-        return True
+    if do_update:
+        if "CUSTOM NODE PULL: True" in output:
+            process.wait()
+            print(f"\rUpdated: {path}")
+            return True
+        elif "CUSTOM NODE PULL: None" in output:
+            process.wait()
+            return True
+        else:
+            print(f"\rUpdate error: {path}")
+            process.wait()
+            return False
     else:
-        process.wait()
-        return False
+        if "CUSTOM NODE CHECK: True" in output:
+            process.wait()
+            return True
+        elif "CUSTOM NODE CHECK: False" in output:
+            process.wait()
+            return False
+        else:
+            print(f"\rFetch error: {path}")
+            process.wait()
+            return False
 
 
 def __win_check_git_pull(path):
@@ -232,13 +283,18 @@ def __win_check_git_pull(path):
     process.wait()
 
 
-def git_repo_has_updates(path, do_fetch=False):
+def git_repo_has_updates(path, do_fetch=False, do_update=False):
+    if do_fetch:
+        print(f"\x1b[2K\rFetching: {path}", end='')
+    elif do_update:
+        print(f"\x1b[2K\rUpdating: {path}", end='')
+
     # Check if the path is a git repository
     if not os.path.exists(os.path.join(path, '.git')):
         raise ValueError('Not a git repository')
 
     if platform.system() == "Windows":
-        return __win_check_git_update(path, do_fetch)
+        return __win_check_git_update(path, do_fetch, do_update)
     else:
         # Fetch the latest commits from the remote repository
         repo = git.Repo(path)
@@ -249,11 +305,28 @@ def git_repo_has_updates(path, do_fetch=False):
         remote_name = 'origin'
         remote = repo.remote(name=remote_name)
 
-        if do_fetch:
+        # Get the current commit hash
+        commit_hash = repo.head.commit.hexsha
+
+        if do_fetch or do_update:
             remote.fetch()
 
-        # Get the current commit hash and the commit hash of the remote branch
-        commit_hash = repo.head.commit.hexsha
+        if do_update:
+            try:
+                remote.pull(rebase=True)
+                repo.git.submodule('update', '--init', '--recursive')
+                new_commit_hash = repo.head.commit.hexsha
+
+                if commit_hash != new_commit_hash:
+                    print(f"\x1b[2K\rUpdated: {path}")
+                    return True
+                else:
+                    return False
+
+            except Exception as e:
+                print(f"\nUpdating failed: {path}\n{e}", file=sys.stderr)
+
+        # Get commit hash of the remote branch
         remote_commit_hash = repo.refs[f'{remote_name}/{branch_name}'].object.hexsha
 
         # Compare the commit hashes to determine if the local repository is behind the remote repository
@@ -298,7 +371,7 @@ async def get_data(uri):
             async with session.get(uri) as resp:
                 json_text = await resp.text()
     else:
-        with open(uri, "r") as f:
+        with open(uri, "r", encoding="utf-8") as f:
             json_text = f.read()
 
     json_obj = json.loads(json_text)
@@ -306,21 +379,34 @@ async def get_data(uri):
 
 
 def setup_js():
-    # remove garbage
-    old_js_path = os.path.join(comfy_path, "web", "extensions", "core", "comfyui-manager.js")
-    if os.path.exists(old_js_path):
-        os.remove(old_js_path)
-
-    # setup js
+    import nodes
     js_dest_path = os.path.join(js_path, "comfyui-manager")
-    if not os.path.exists(js_dest_path):
-        os.makedirs(js_dest_path)
-    js_src_path = os.path.join(comfyui_manager_path, "js", "comfyui-manager.js")
 
-    print(f"### ComfyUI-Manager: Copy .js from '{js_src_path}' to '{js_dest_path}'")
-    shutil.copy(js_src_path, js_dest_path)
+    if hasattr(nodes, "EXTENSION_WEB_DIRS"):
+        if os.path.exists(js_dest_path):
+            shutil.rmtree(js_dest_path)
+    else:
+        print(f"[WARN] ComfyUI-Manager: Your ComfyUI version is outdated. Please update to the latest version.")
+        # setup js
+        if not os.path.exists(js_dest_path):
+            os.makedirs(js_dest_path)
+        js_src_path = os.path.join(comfyui_manager_path, "js", "comfyui-manager.js")
+
+        print(f"### ComfyUI-Manager: Copy .js from '{js_src_path}' to '{js_dest_path}'")
+        shutil.copy(js_src_path, js_dest_path)
+
 
 setup_js()
+
+
+def setup_environment():
+    git_exe = get_config()['git_exe']
+
+    if git_exe != '':
+        git.Git().update_environment(GIT_PYTHON_GIT_EXECUTABLE=git_exe)
+
+
+setup_environment()
 
 
 # Expand Server api
@@ -335,7 +421,14 @@ import urllib.request
 
 def get_model_dir(data):
     if data['save_path'] != 'default':
-        base_model = os.path.join(folder_paths.models_dir, data['save_path'])
+        if '..' in data['save_path'] or data['save_path'].startswith('/'):
+            print(f"[WARN] '{data['save_path']}' is not allowed path. So it will be saved into 'models/etc'.")
+            base_model = "etc"
+        else:
+            if data['save_path'].startswith("custom_nodes"):
+                base_model = os.path.join(comfy_path, data['save_path'])
+            else:
+                base_model = os.path.join(folder_paths.models_dir, data['save_path'])
     else:
         model_type = data['type']
         if model_type == "checkpoints":
@@ -371,7 +464,7 @@ def get_model_path(data):
     return os.path.join(base_model, data['filename'])
 
 
-def check_a_custom_node_installed(item, do_fetch=False, do_update_check=True):
+def check_a_custom_node_installed(item, do_fetch=False, do_update_check=True, do_update=False):
     item['installed'] = 'None'
 
     if item['install_type'] == 'git-clone' and len(item['files']) == 1:
@@ -379,7 +472,7 @@ def check_a_custom_node_installed(item, do_fetch=False, do_update_check=True):
         dir_path = os.path.join(custom_nodes_path, dir_name)
         if os.path.exists(dir_path):
             try:
-                if do_update_check and git_repo_has_updates(dir_path, do_fetch):
+                if do_update_check and git_repo_has_updates(dir_path, do_fetch, do_update):
                     item['installed'] = 'Update'
                 else:
                     item['installed'] = 'True'
@@ -411,9 +504,27 @@ def check_a_custom_node_installed(item, do_fetch=False, do_update_check=True):
             item['installed'] = 'False'
 
 
-def check_custom_nodes_installed(json_obj, do_fetch=False, do_update_check=True):
+def check_custom_nodes_installed(json_obj, do_fetch=False, do_update_check=True, do_update=False):
+    if do_fetch:
+        print("Start fetching...", end="")
+    elif do_update:
+        print("Start updating...", end="")
+    elif do_update_check:
+        print("Start update check...", end="")
+
     for item in json_obj['custom_nodes']:
-        check_a_custom_node_installed(item, do_fetch, do_update_check)
+        check_a_custom_node_installed(item, do_fetch, do_update_check, do_update)
+
+    if do_fetch:
+        print(f"\x1b[2K\rFetching done.")
+    elif do_update:
+        update_exists = any(item['installed'] == 'Update' for item in json_obj['custom_nodes'])
+        if update_exists:
+            print(f"\x1b[2K\rUpdate done.")
+        else:
+            print(f"\x1b[2K\rAll extensions are already up-to-date.")
+    elif do_update_check:
+        print(f"\x1b[2K\rUpdate check done.")
 
 
 @server.PromptServer.instance.routes.get("/customnode/getmappings")
@@ -421,7 +532,7 @@ async def fetch_customnode_mappings(request):
     if request.rel_url.query["mode"] == "local":
         uri = local_db_extension_node_mappings
     else:
-        uri = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/extension-node-map.json'
+        uri = get_config()['channel_url'] + '/extension-node-map.json'
 
     json_obj = await get_data(uri)
 
@@ -434,13 +545,34 @@ async def fetch_updates(request):
         if request.rel_url.query["mode"] == "local":
             uri = local_db_custom_node_list
         else:
-            uri = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/custom-node-list.json'
+            uri = get_config()['channel_url'] + '/custom-node-list.json'
 
         json_obj = await get_data(uri)
         check_custom_nodes_installed(json_obj, True)
 
         update_exists = any('custom_nodes' in json_obj and 'installed' in node and node['installed'] == 'Update' for node in
                             json_obj['custom_nodes'])
+
+        if update_exists:
+            return web.Response(status=201)
+
+        return web.Response(status=200)
+    except:
+        return web.Response(status=400)
+
+
+@server.PromptServer.instance.routes.get("/customnode/update_all")
+async def update_all(request):
+    try:
+        if request.rel_url.query["mode"] == "local":
+            uri = local_db_custom_node_list
+        else:
+            uri = get_config()['channel_url'] + '/custom-node-list.json'
+
+        json_obj = await get_data(uri)
+        check_custom_nodes_installed(json_obj, do_update=True)
+
+        update_exists = any(item['installed'] == 'Update' for item in json_obj['custom_nodes'])
 
         if update_exists:
             return web.Response(status=201)
@@ -460,7 +592,7 @@ async def fetch_customnode_list(request):
     if request.rel_url.query["mode"] == "local":
         uri = local_db_custom_node_list
     else:
-        uri = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/custom-node-list.json'
+        uri = get_config()['channel_url'] + '/custom-node-list.json'
 
     json_obj = await get_data(uri)
     check_custom_nodes_installed(json_obj, False, not skip_update)
@@ -479,8 +611,8 @@ async def fetch_alternatives_list(request):
         uri1 = local_db_alter
         uri2 = local_db_custom_node_list
     else:
-        uri1 = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/alter-list.json'
-        uri2 = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/custom-node-list.json'
+        uri1 = get_config()['channel_url'] + '/alter-list.json'
+        uri2 = get_config()['channel_url'] + '/custom-node-list.json'
 
     alter_json = await get_data(uri1)
     custom_node_json = await get_data(uri2)
@@ -518,7 +650,7 @@ async def fetch_externalmodel_list(request):
     if request.rel_url.query["mode"] == "local":
         uri = local_db_model
     else:
-        uri = 'https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/model-list.json'
+        uri = get_config()['channel_url'] + '/model-list.json'
 
     json_obj = await get_data(uri)
     check_model_installed(json_obj)
@@ -545,7 +677,7 @@ def unzip_install(files):
 
             os.remove(temp_filename)
         except Exception as e:
-            print(f"Install(unzip) error: {url} / {e}")
+            print(f"Install(unzip) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Installation was successful.")
@@ -568,7 +700,7 @@ def download_url_with_agent(url, save_path):
             f.write(data)
 
     except Exception as e:
-        print(f"Download error: {url} / {e}")
+        print(f"Download error: {url} / {e}", file=sys.stderr)
         return False
 
     print("Installation was successful.")
@@ -587,7 +719,7 @@ def copy_install(files, js_path_name=None):
                 download_url(url, path)
 
         except Exception as e:
-            print(f"Install(copy) error: {url} / {e}")
+            print(f"Install(copy) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Installation was successful.")
@@ -606,7 +738,7 @@ def copy_uninstall(files, js_path_name='.'):
             elif os.path.exists(file_path + ".disabled"):
                 os.remove(file_path + ".disabled")
         except Exception as e:
-            print(f"Uninstall(copy) error: {url} / {e}")
+            print(f"Uninstall(copy) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Uninstallation was successful.")
@@ -635,7 +767,7 @@ def copy_set_active(files, is_disable, js_path_name='.'):
             os.rename(current_name, new_name)
 
         except Exception as e:
-            print(f"{action_name}(copy) error: {url} / {e}")
+            print(f"{action_name}(copy) error: {url} / {e}", file=sys.stderr)
 
             return False
 
@@ -685,7 +817,7 @@ def gitclone_install(files):
                 return False
 
         except Exception as e:
-            print(f"Install(git-clone) error: {url} / {e}")
+            print(f"Install(git-clone) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Installation was successful.")
@@ -754,7 +886,7 @@ def gitclone_uninstall(files):
             elif os.path.exists(dir_path + ".disabled"):
                 rmtree(dir_path + ".disabled")
         except Exception as e:
-            print(f"Uninstall(git-clone) error: {url} / {e}")
+            print(f"Uninstall(git-clone) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Uninstallation was successful.")
@@ -799,7 +931,7 @@ def gitclone_set_active(files, is_disable):
                     try_install_script(url, new_path, enable_script)
 
         except Exception as e:
-            print(f"{action_name}(git-clone) error: {url} / {e}")
+            print(f"{action_name}(git-clone) error: {url} / {e}", file=sys.stderr)
             return False
 
     print(f"{action_name} was successful.")
@@ -820,7 +952,7 @@ def gitclone_update(files):
                 return False
 
         except Exception as e:
-            print(f"Update(git-clone) error: {url} / {e}")
+            print(f"Update(git-clone) error: {url} / {e}", file=sys.stderr)
             return False
 
     print("Update was successful.")
@@ -937,7 +1069,7 @@ async def install_custom_node(request):
         else:
             return web.Response(status=200)
     except Exception as e:
-        print(f"ComfyUI update fail: {e}")
+        print(f"ComfyUI update fail: {e}", file=sys.stderr)
         pass
 
     return web.Response(status=400)
@@ -989,7 +1121,7 @@ async def install_model(request):
         if res:
             return web.json_response({}, content_type='application/json')
     except Exception as e:
-        print(f"[ERROR] {e}")
+        print(f"[ERROR] {e}", file=sys.stderr)
         pass
 
     return web.Response(status=400)
@@ -1017,5 +1149,32 @@ async def badge_mode(request):
     return web.Response(status=200)
 
 
+@server.PromptServer.instance.routes.get("/manager/channel_url_list")
+async def channel_url_list(request):
+    channels = default_channels+","+get_config()['channel_url_list']
+    channels = channels.split(',')
+
+    if "value" in request.rel_url.query:
+        for item in channels:
+            name_url = item.split("::")
+            if len(name_url) == 2 and name_url[0] == request.rel_url.query['value']:
+                get_config()['channel_url'] = name_url[1]
+                write_config()
+                break
+    else:
+        selected = 'custom'
+        selected_url = get_config()['channel_url']
+        for item in channels:
+            item_info = item.split('::')
+            if len(item_info) == 2 and item_info[1] == selected_url:
+                selected = item_info[0]
+
+        res = {'selected': selected,
+               'list': channels}
+        return web.json_response(res, status=200)
+
+    return web.Response(status=200)
+
+WEB_DIRECTORY = "js"
 NODE_CLASS_MAPPINGS = {}
 __all__ = ['NODE_CLASS_MAPPINGS']

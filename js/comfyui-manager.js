@@ -5,6 +5,7 @@ import {ComfyWidgets} from "../../scripts/widgets.js";
 
 var update_comfyui_button = null;
 var fetch_updates_button = null;
+var update_all_button = null;
 var badge_mode = "none";
 
 async function init_badge_mode() {
@@ -214,7 +215,7 @@ async function fetchUpdates(update_check_checkbox) {
 
 		const response = await api.fetchApi(`/customnode/fetch_updates?mode=${mode}`);
 
-		if(response.status == 400) {
+		if(response.status != 200 && response.status != 201) {
 			app.ui.dialog.show('Failed to fetch updates.');
 			app.ui.dialog.element.style.zIndex = 9999;
 			return false;
@@ -241,6 +242,49 @@ async function fetchUpdates(update_check_checkbox) {
 		fetch_updates_button.disabled = false;
 		fetch_updates_button.innerText = prev_text;
 		fetch_updates_button.style.backgroundColor = "";
+	}
+}
+
+async function updateAll(update_check_checkbox) {
+    let prev_text = update_all_button.innerText;
+	update_all_button.innerText = "Updating all...(ComfyUI)";
+	update_all_button.disabled = true;
+	update_all_button.style.backgroundColor = "gray";
+
+	try {
+		var mode = "url";
+        if(ManagerMenuDialog.instance.local_mode_checkbox.checked)
+            mode = "local";
+
+		update_all_button.innerText = "Updating all...";
+		const response1 = await api.fetchApi('/comfyui_manager/update_comfyui');
+		const response2 = await api.fetchApi(`/customnode/update_all?mode=${mode}`);
+
+		if(response1.status != 200 && response2.status != 201) {
+			app.ui.dialog.show('Failed to update ComfyUI or several extensions.<BR><BR>See terminal log.<BR>');
+			app.ui.dialog.element.style.zIndex = 9999;
+			return false;
+		}
+		if(response1.status == 201 || response2.status == 201) {
+	        app.ui.dialog.show('ComfyUI and all extensions have been updated to the latest version.');
+			app.ui.dialog.element.style.zIndex = 9999;
+		}
+		else {
+			app.ui.dialog.show('ComfyUI and all extensions are already up-to-date with the latest versions.');
+	        app.ui.dialog.element.style.zIndex = 9999;
+        }
+
+		return true;
+	}
+	catch(exception) {
+		app.ui.dialog.show(`Failed to update ComfyUI or several extensions / ${exception}`);
+		app.ui.dialog.element.style.zIndex = 9999;
+		return false;
+	}
+	finally {
+		update_all_button.disabled = false;
+		update_all_button.innerText = prev_text;
+		update_all_button.style.backgroundColor = "";
 	}
 }
 
@@ -300,9 +344,9 @@ class CustomNodesInstaller extends ComfyDialog {
 	}
 
 	disableButtons() {
-		for(let i in self.install_buttons) {
-			self.install_buttons[i].disabled = true;
-			self.install_buttons[i].style.backgroundColor = 'gray';
+		for(let i in this.install_buttons) {
+			this.install_buttons[i].disabled = true;
+			this.install_buttons[i].style.backgroundColor = 'gray';
 		}
 	}
 
@@ -600,6 +644,7 @@ class CustomNodesInstaller extends ComfyDialog {
 				data1.innerHTML = i+1;
 				var data2 = document.createElement('td');
 		        data2.style.maxWidth = "100px";
+				data2.className = "cm-node-author"
 				data2.textContent = ` ${data.author}`;
 				data2.style.whiteSpace = "nowrap";
                 data2.style.overflow = "hidden";
@@ -607,13 +652,16 @@ class CustomNodesInstaller extends ComfyDialog {
                 var data3 = document.createElement('td');
                 data3.style.maxWidth = "200px";
                 data3.style.wordWrap = "break-word";
+				data3.className = "cm-node-name"
                 data3.innerHTML = `&nbsp;<a href=${data.reference} target="_blank"><font color="skyblue"><b>${data.title}</b></font></a>`;
 				var data4 = document.createElement('td');
 				data4.innerHTML = data.description;
+				data4.className = "cm-node-desc"
 				var data5 = document.createElement('td');
 				data5.style.textAlign = "center";
 
 				var installBtn = document.createElement('button');
+				installBtn.className = "cm-btn-install";
 				var installBtn2 = null;
 				var installBtn3 = null;
 
@@ -623,6 +671,7 @@ class CustomNodesInstaller extends ComfyDialog {
 				case 'Disabled':
 					installBtn3 = document.createElement('button');
 					installBtn3.innerHTML = 'Enable';
+					installBtn3.className = "cm-btn-enable";
 					installBtn3.style.backgroundColor = 'blue';
 					installBtn3.style.color = 'white';
 					this.install_buttons.push(installBtn3);
@@ -633,12 +682,14 @@ class CustomNodesInstaller extends ComfyDialog {
 				case 'Update':
 					installBtn2 = document.createElement('button');
 					installBtn2.innerHTML = 'Update';
+					installBtn2.className = "cm-btn-update";
 					installBtn2.style.backgroundColor = 'blue';
 					installBtn2.style.color = 'white';
 					this.install_buttons.push(installBtn2);
 
 					installBtn3 = document.createElement('button');
 					installBtn3.innerHTML = 'Disable';
+					installBtn3.className = "cm-btn-disable";
 					installBtn3.style.backgroundColor = 'MediumSlateBlue';
 					installBtn3.style.color = 'white';
 					this.install_buttons.push(installBtn3);
@@ -649,6 +700,7 @@ class CustomNodesInstaller extends ComfyDialog {
 				case 'True':
 					installBtn3 = document.createElement('button');
 					installBtn3.innerHTML = 'Disable';
+					installBtn3.className = "cm-btn-disable";
 					installBtn3.style.backgroundColor = 'MediumSlateBlue';
 					installBtn3.style.color = 'white';
 					this.install_buttons.push(installBtn3);
@@ -884,9 +936,9 @@ class AlternativesInstaller extends ComfyDialog {
 	}
 
 	disableButtons() {
-		for(let i in self.install_buttons) {
-			self.install_buttons[i].disabled = true;
-			self.install_buttons[i].style.backgroundColor = 'gray';
+		for(let i in this.install_buttons) {
+			this.install_buttons[i].disabled = true;
+			this.install_buttons[i].style.backgroundColor = 'gray';
 		}
 	}
 
@@ -895,6 +947,10 @@ class AlternativesInstaller extends ComfyDialog {
 		for(let i in this.grid_rows) {
 			let data1 = this.grid_rows[i].data;
 			let data2 = data1.custom_node;
+
+			if(!data2)
+			    continue;
+
 			let content = data1.tags.toLowerCase() + data1.description.toLowerCase() + data2.author.toLowerCase() + data2.description.toLowerCase() + data2.title.toLowerCase();
 
 			if(this.filter && this.filter != '*') {
@@ -1502,13 +1558,14 @@ class ModelInstaller extends ComfyDialog {
 		header3.style.width = "100px";
 		var header4 = document.createElement('th');
 		header4.innerHTML = 'Name';
-		header4.style.width = "200px";
+		header4.style.width = "30%";
 		var header5 = document.createElement('th');
 		header5.innerHTML = 'Filename';
-		header5.style.width = "250px";
+		header5.style.width = "20%";
 		header5.style.tableLayout = "fixed";
 		var header6 = document.createElement('th');
-		header6.innerHTML = 'description';
+		header6.innerHTML = 'Description';
+		header6.style.width = "50%";
 		var header_down = document.createElement('th');
 		header_down.innerHTML = 'Download';
 		header_down.style.width = "50px";
@@ -1545,11 +1602,14 @@ class ModelInstaller extends ComfyDialog {
 				var data3 = document.createElement('td');
 				data3.innerHTML = `&nbsp;${data.base}`;
 				var data4 = document.createElement('td');
+				data4.className = "cm-node-name";
 				data4.innerHTML = `&nbsp;<a href=${data.reference} target="_blank"><font color="skyblue"><b>${data.name}</b></font></a>`;
 				var data5 = document.createElement('td');
+				data5.className = "cm-node-filename";
 				data5.innerHTML = `&nbsp;${data.filename}`;
 				data5.style.wordBreak = "break-all";
 				var data6 = document.createElement('td');
+				data6.className = "cm-node-desc";
 				data6.innerHTML = data.description;
 				data6.style.wordBreak = "break-all";
 				var data_install = document.createElement('td');
@@ -1752,6 +1812,14 @@ class ManagerMenuDialog extends ComfyDialog {
 						() => fetchUpdates(this.update_check_checkbox)
 				});
 
+		update_all_button =
+				$el("button", {
+					type: "button",
+					textContent: "Update All",
+					onclick:
+						() => updateAll(this.update_check_checkbox)
+				});
+
         // preview method
 		let preview_combo = document.createElement("select");
         preview_combo.appendChild($el('option', {value:'auto', text:'Preview method: Auto'}, []));
@@ -1775,13 +1843,38 @@ class ManagerMenuDialog extends ComfyDialog {
 
         api.fetchApi('/manager/badge_mode')
         .then(response => response.text())
-        .then(data => { badge_combo.value = data; badge_mode = data; })
+        .then(data => { badge_combo.value = data; badge_mode = data; });
 
 		badge_combo.addEventListener('change', function(event) {
             api.fetchApi(`/manager/badge_mode?value=${event.target.value}`);
             badge_mode = event.target.value;
             app.graph.setDirtyCanvas(true);
 		});
+
+        // channel
+		let channel_combo = document.createElement("select");
+        api.fetchApi('/manager/channel_url_list')
+        .then(response => response.json())
+        .then(async data => {
+            try {
+				let urls = data.list;
+				for(let i in urls) {
+					if(urls[i] != '') {
+						let name_url = urls[i].split('::');
+	                    channel_combo.appendChild($el('option', {value:name_url[0], text:`Channel: ${name_url[0]}`}, []));
+	                }
+	            }
+
+				channel_combo.addEventListener('change', function(event) {
+		            api.fetchApi(`/manager/channel_url_list?value=${event.target.value}`);
+				});
+
+                channel_combo.value = data.selected;
+			}
+			catch(exception) {
+
+			}
+        });
 
 		const res =
 			[
@@ -1823,6 +1916,7 @@ class ManagerMenuDialog extends ComfyDialog {
 				}),
 
                 $el("br", {}, []),
+				update_all_button,
 				update_comfyui_button,
 				fetch_updates_button,
 
@@ -1849,6 +1943,7 @@ class ManagerMenuDialog extends ComfyDialog {
 				$el("hr", {width: "100%"}, []),
 				preview_combo,
 				badge_combo,
+				channel_combo,
 				$el("hr", {width: "100%"}, []),
                 $el("br", {}, []),
 
@@ -1906,7 +2001,7 @@ app.registerExtension({
         nodeType.prototype.onDrawForeground = function (ctx) {
             const r = onDrawForeground?.apply?.(this, arguments);
 
-            if(!this.flags.collapsed && badge_mode != 'none') {
+            if(!this.flags.collapsed && badge_mode != 'none' && nodeType.title_mode != LiteGraph.NO_TITLE) {
                 let text = "";
                 if(badge_mode == 'id_nick')
                     text = `#${this.id} `;
