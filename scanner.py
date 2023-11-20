@@ -3,6 +3,7 @@ import os
 import json
 from git import Repo
 from torchvision.datasets.utils import download_url
+import concurrent
 
 builtin_nodes = ["KSampler", "CheckpointSave"]
 
@@ -103,7 +104,7 @@ def get_nodes(target_dir):
 
 
 def get_git_urls_from_json(json_file):
-    with open(json_file) as file:
+    with open(json_file, encoding='utf-8') as file:
         data = json.load(file)
 
         custom_nodes = data.get('custom_nodes', [])
@@ -118,7 +119,7 @@ def get_git_urls_from_json(json_file):
 
 
 def get_py_urls_from_json(json_file):
-    with open(json_file) as file:
+    with open(json_file, encoding='utf-8') as file:
         data = json.load(file)
 
         custom_nodes = data.get('custom_nodes', [])
@@ -162,17 +163,22 @@ def update_custom_nodes():
 
     git_url_titles = get_git_urls_from_json('custom-node-list.json')
 
-    for url, title in git_url_titles:
+    def process_git_url_title(url, title):
         name = os.path.basename(url)
         if name.endswith(".git"):
             name = name[:-4]
-            
+        
         node_info[name] = (url, title)
         clone_or_pull_git_repository(url)
 
+    with concurrent.futures.ThreadPoolExecutor(10) as executor:
+        for url, title in git_url_titles:
+            executor.submit(process_git_url_title, url, title)
+
     py_url_titles = get_py_urls_from_json('custom-node-list.json')
 
-    for url, title in py_url_titles:
+    def download_and_store_info(url_title):
+        url, title = url_title
         name = os.path.basename(url)
         if name.endswith(".py"):
             node_info[name] = (url, title)
@@ -181,6 +187,9 @@ def update_custom_nodes():
             download_url(url, ".tmp")
         except:
             print(f"[ERROR] Cannot download '{url}'")
+
+    with concurrent.futures.ThreadPoolExecutor(10) as executor:
+        executor.map(download_and_store_info, py_url_titles)
             
     return node_info
 
@@ -237,7 +246,7 @@ def gen_json(node_info):
         if os.path.exists(node_list_json_path):
             git_url, title = node_info[extension]
 
-            with open(node_list_json_path, 'r') as f:
+            with open(node_list_json_path, 'r', encoding='utf-8') as f:
                 node_list_json = json.load(f)
 
             metadata_in_url = {}
@@ -256,7 +265,7 @@ def gen_json(node_info):
             data[git_url] = (nodes, metadata_in_url)
 
     json_path = f"extension-node-map.json"
-    with open(json_path, "w") as file:
+    with open(json_path, "w", encoding='utf-8') as file:
         json.dump(data, file, indent=4, sort_keys=True)
 
 

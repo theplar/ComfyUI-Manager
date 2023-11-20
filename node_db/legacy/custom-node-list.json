@@ -1,6 +1,66 @@
 {
     "custom_nodes": [
         {
+            "author": "tkoenig89",
+            "title": "Load Image with metadata",
+            "reference": "https://github.com/tkoenig89/ComfyUI_Load_Image_With_Metadata",
+            "files": [
+                "https://github.com/tkoenig89/ComfyUI_Load_Image_With_Metadata"
+            ],
+            "install_type": "git-clone",
+            "description": "A custom node for comfy ui to read generation data from images (prompt, seed, size...). This could be used when upscaling generated images to use the original prompt and seed."
+        },
+        {
+            "author": "LucianoCirino",
+            "title": "Efficiency Nodes for ComfyUI [LEGACY]",
+            "reference": "https://github.com/LucianoCirino/efficiency-nodes-comfyui",
+            "files": [
+                "https://github.com/LucianoCirino/efficiency-nodes-comfyui"
+            ],
+            "install_type": "git-clone",
+            "description": "A collection of ComfyUI custom nodes to help streamline workflows and reduce total node count.<BR>NOTE: This repository is the original repository but is no longer maintained. Please use the forked version by jags."
+        },
+        {
+            "author": "GeLi1989",
+            "title": "roop nodes for ComfyUI",
+            "reference": "https://github.com/GeLi1989/GK-beifen-ComfyUI_roop",
+            "files": [
+                "https://github.com/GeLi1989/GK-beifen-ComfyUI_roop"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI nodes for the roop A1111 webui script. NOTE: Need to download <a href='https://github.com/SumDeusVitae/FaceSwap_v01/raw/main/inswapper_128.onnx' target='blank'/>model</a> to use this node. NOTE: This is removed."
+        },
+        {
+            "author": "ProDALOR",
+            "title": "comfyui_u2net",
+            "reference": "https://github.com/ProDALOR/comfyui_u2net",
+            "files": [
+                "https://github.com/ProDALOR/comfyui_u2net"
+            ],
+            "install_type": "git-clone",
+            "description": "Nodes: Load U2Net model, U2Net segmentation, To mask, Segmentation to mask, U2NetBaseNormalization, U2NetMaxNormalization. NOTE: This is removed."
+        },
+        {
+            "author": "FizzleDorf",
+            "title": "AIT",
+            "reference": "https://github.com/FizzleDorf/AIT",
+            "files": [
+                "https://github.com/FizzleDorf/AIT"
+            ],
+            "install_type": "git-clone",
+            "description": "Nodes: Load AITemplate, Load AITemplate (ControlNet), VAE Decode (AITemplate), VAE Encode (AITemplate), VAE Encode (AITemplate, Inpaint). Experimental usage of AITemplate. NOTE: This is deprecated extension. Use <b>ComfyUI-AIT</b> instead of this."
+        },
+        {
+            "author": "chenbaiyujason",
+            "title": "sc-node-comfyui",
+            "reference": "https://github.com/chenbaiyujason/sc-node-comfyui",
+            "files": [
+                "https://github.com/chenbaiyujason/sc-node-comfyui"
+            ],
+            "install_type": "git-clone",
+            "description": "Nodes for GPT interaction and text manipulation"
+        },
+        {
             "author": "asd417",
             "title": "CheckpointTomeLoader",
             "reference": "https://github.com/asd417/tomeSD_for_Comfy",

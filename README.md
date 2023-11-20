@@ -1,7 +1,12 @@
 # ComfyUI Manager
 
+**ComfyUI-Manager** is an extension designed to enhance the usability of [ComfyUI](https://github.com/comfyanonymous/ComfyUI). It offers management functions to **install, remove, disable, and enable** various custom nodes of ComfyUI. Furthermore, this extension provides a hub feature and convenience functions to access a wide range of information within ComfyUI.
+
+![menu](misc/menu.jpg)
 
 ## NOTICE
+* If you wish to hide the 'Share' button, please refer to the settings menu.
+* You can see whole nodes info on [ComfyUI Nodes Info](https://ltdrdata.github.io/) page.
 * Versions prior to V0.22.2 will no longer detect missing nodes unless using a local database. Please update ComfyUI-Manager to the latest version.
 
 ## Installation
@@ -96,6 +101,18 @@ This repository provides Colab notebooks that allow you to install and use Comfy
 
 ![model-install-dialog](misc/nickname.jpg)
 
+
+## Snapshot-Manager
+* When you press `Save snapshot` or use `Update All` on `Manager Menu`, the current installation status snapshot is saved.
+  * Snapshot file dir: `ComfyUI-Manager/snapshots`
+  * You can rename snapshot file.
+* Press the "Restore" button to revert to the installation status of the respective snapshot.
+  * However, for custom nodes not managed by Git, snapshot support is incomplete.
+* When you press `Restore`, it will take effect on the next ComfyUI startup.
+
+  
+![model-install-dialog](misc/snapshot.jpg)
+
 ## How to register your custom node into ComfyUI-Manager
 
 * Add an entry to `custom-node-list.json` located in the root of ComfyUI-Manager and submit a Pull Request.
@@ -109,7 +126,7 @@ This repository provides Colab notebooks that allow you to install and use Comfy
 * Please submit a pull request to update either the custom-node-list.json or model-list.json file.
 
 * The scanner currently provides a detection function for missing nodes, which is capable of detecting nodes described by the following two patterns.
-  * Or you can provide manually `node_list.js` file. 
+  * Or you can provide manually `node_list.json` file. 
 
 ```
 NODE_CLASS_MAPPINGS = {
@@ -139,7 +156,7 @@ NODE_CLASS_MAPPINGS.update({
 
 
 * **Special purpose files** (optional)
-  * `node_list.js` - When your custom nodes pattern of NODE_CLASS_MAPPINGS is not conventional, it is used to manually provide a list of nodes for reference. ([example](https://github.com/melMass/comfy_mtb/raw/main/node_list.json))
+  * `node_list.json` - When your custom nodes pattern of NODE_CLASS_MAPPINGS is not conventional, it is used to manually provide a list of nodes for reference. ([example](https://github.com/melMass/comfy_mtb/raw/main/node_list.json))
   * `requirements.txt` - When installing, this pip requirements will be installed automatically 
   * `install.py` - When installing, it is automatically called
   * `uninstall.py` - When uninstalling, it is automatically called
@@ -156,10 +173,6 @@ NODE_CLASS_MAPPINGS.update({
 
 ![missing-list](misc/missing-list.png)
 
-* Currently, support is not available for custom nodes that can only be downloaded through civitai.
-
-* [ComfyUI_Custom_Nodes_AlekPet](https://github.com/AlekPet/ComfyUI_Custom_Nodes_AlekPet)
-
 
 ## Troubleshooting
 * If your `git.exe` is installed in a specific location other than system git, please install ComfyUI-Manager and run ComfyUI. Then, specify the path including the file name in `git_exe = ` in the ComfyUI-Manager/config.ini file that is generated.
@@ -174,19 +187,19 @@ NODE_CLASS_MAPPINGS.update({
 
 * https://github.com/diontimmer/Sample-Diffusion-ComfyUI-Extension
 * https://github.com/senshilabs/NINJA-plugin
+* https://github.com/MockbaTheBorg/Nodes
 
 
 ## Roadmap
 
-- [x] category/keyword filter
-- [x] Automatic recognition of missing custom nodes
-- [x] Automatic installation suggestion of missing custom nodes
-- [x] 3rd party repository
-- [ ] installation from git url 
-- [ ] Specification of custom nodes
-- [ ] Specification scanner
-- [ ] Search extension by node name
-- [ ] workflow downloader
+- [ ] System displaying information about failed custom nodes import.
+- [ ] Guide for missing nodes in ComfyUI vanilla nodes.
+- [ ] Auto migration for custom nodes with changed structures.
+- [ ] Version control feature for nodes.
+- [ ] List of currently used custom nodes.
+- [ ] Template sharing system.
+- [ ] 3rd party API system.
+- [ ] Collision checking system for nodes with the same ID across extensions.
 
 
 # Disclaimer
